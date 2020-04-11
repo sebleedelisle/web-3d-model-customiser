@@ -52,7 +52,12 @@
             </select>
           </div>
 
-          
+            <div class="input-group">
+            <label for="add-bottom-reinforcement">include the bottom reinforcement part </label>
+            <input type="checkbox" id="add-bottom-reinforcement" checked>
+           
+          </div>
+
 
         </div>
 
@@ -65,16 +70,17 @@
           <div class="input-group">
              <label for="selected-quality">Refinement</label>
             <select id="selected-quality">
-              <option value="low">
-                Low (slow, fewer triangles)
-              </option>
               <option value="medium">
-                Medium (even slower, more triangles)
+                Medium (faster to process, fewer triangles)
               </option>
-              <option value="high">
-                High (really flipping slow, so many triangles)
+              <option value="high" selected="true">
+                High 
               </option>
             </select>
+          </div>
+           <div class="input-group">
+            <label for="layer-height">Layer height*</label>
+            <input id="layer-height" type="number" min="0.1" max="0.5" value="0.25" step="0.05">
           </div>
           <div class="input-group">
             <input id="download-button" type="button" value="download">
@@ -92,9 +98,13 @@
       </div>
       <footer>
         <p />
+        <em>* Layer height is an experimental feature. 0.25 is the only value that we know works.</em>
+        <p />
         This tool can add the date, material type and your name to the <a href="https://www.prusaprinters.org/prints/25857/files">Prusa Face Shield RC3</a> 3D model. 
-       
-        <p><em>*Note - currently only PETG and PLA are recommended for use in the <a href="http://3dcrowd.uk">3DCrowd.UK</a> project</em>
+        <p />
+        <strong>NOTE</strong> Just like the original Prusa stacks, these models are optimised for a 0.25mm (250 micron) layer height. Other layer heights may cause unexpected problems and failure to separate. 
+        <p />
+        <em>Currently only PETG and PLA are recommended for use in the <a href="http://3dcrowd.uk">3DCrowd.UK</a> project</em>
         <p />
         Suggestions or problems? Create an issue on <a href="https://github.com/paulhayes/web-3d-model-customiser">our github page</a>
         <p /> 
