@@ -5,9 +5,11 @@ const { CSG } = require("@jscad/csg/api").csg;
 
 function main(params) { 
     if(params.statusCallback){
-      params.statusCallback({progress:0});
+      params.statusCallback({progress:0, message:"Preparing data"});
     }
    
+  
+
     let shield; 
 
     let count = params.count; 
@@ -34,8 +36,7 @@ function main(params) {
 
     console.log(params); 
     
-    let cutouts = new CSG();
-    if(params.cutOuts) cutouts = params.cutOuts.scale([1,1,(layerheight<0.4)?layerheight*2:layerheight]);
+    let cutouts = params.cutOuts.scale([1,1,(layerheight<0.4)?layerheight*2:layerheight]);
     
     let depth=0.75;
     let xpos = 87.6-depth; 
@@ -76,7 +77,7 @@ function main(params) {
     let labelsright = (labelobject2.scale([textscaleX,textscaleY,1]).rotateX(90).rotateZ(90).translate([xpos,yposright,z]));
 
     if(params.statusCallback){
-      params.statusCallback({progress:10});
+      params.statusCallback({progress:10, message:"Calculating text indentations"});
     }
 
     // now make a single object with all the text to subtract
@@ -95,10 +96,11 @@ function main(params) {
     }
 
     if(params.statusCallback){
-      params.statusCallback({progress:20});
+      params.statusCallback({progress:20, message:"Creating shield template"});
     }
 
     let parts = [shield]; 
+    let partsIntersecting = [];
 
     let supports; 
     // subtract small recesses from the bottom of the stacked shields (to help with separation)
@@ -112,29 +114,64 @@ function main(params) {
         let shieldtranslated = (shield.translate([0,0,i*objectheight]));
 
         parts.push(shieldtranslated); 
-        parts.push(supports.translate([0,0,objectheight*(i-1)]));                 
+        partsIntersecting.push(supports.translate([0,0,objectheight*(i-1)]));                 
     }
+    console.log(params.bottomReinforcement);
+   
+    if(count>2) partsIntersecting.push(params.feet);
+    if(addmouseears) partsIntersecting.push(params.mouseEars);
 
-    if(count>2) parts.push(params.feet);
-    if(addmouseears) parts.push(params.mouseEars);
+    
 
     let partsUnion = parts[0];
     //console.log(parts);
     for(var i=1;i<parts.length;i++){
       //console.log(i,parts[i]);
-      partsUnion = partsUnion.union(parts[i]);
+      if(params.statusCallback){
+        params.statusCallback({progress:20+10*i/parts.length, message:"Combining shield models "+i+" of "+count});
+      }  
+      partsUnion = partsUnion.unionForNonIntersecting(parts[i]);
        
       //console.log("done");
-      if(params.statusCallback){
-        params.statusCallback({progress:20+70*i/parts.length});
-      }  
+      
 
     }
 
-    //if(params.bottomRein
+    partsIntersectingUnion = new CSG(); 
+    for(var i=0;i<partsIntersecting.length;i++){
+      //console.log(i,parts[i]);
+     
+       
+      //console.log("done");
+      if(params.statusCallback){
+        params.statusCallback({progress:30+40*i/partsIntersecting.length, message:"Combining extras "+(i+1)+" of "+count});
+      }  
+       partsIntersectingUnion = partsIntersectingUnion.union(partsIntersecting[i]);
+
+    }
+
+    params.statusCallback({progress:80, message:"Combining shields with supports"});
+    partsUnion = partsUnion.union(partsIntersectingUnion); 
+    
+
+    if(params.addBottom && params.bottomReinforcement) { 
+
+        
+        let bounds = params.bottomReinforcement.getBounds(); 
+        let centre = bounds[1].minus(bounds[0]).scale(0.5).plus(bounds[0]); 
+      
+        let bottomReinforcement = centrePolyOnFloor(params.bottomReinforcement);//.translate([-centre.x,-centre.y,-bounds[0].z]);
+          console.log(bottomReinforcement);
+        for(let i = 0; i<count; i++) { 
+            partsUnion = partsUnion.unionForNonIntersecting(bottomReinforcement.translate([0,15-(i*10),0])); 
+            params.statusCallback({progress:95, message:"Adding bottom reinforcement parts "+(i+1)+" of "+count});
+        }
+
+    }
+
 
     if(params.statusCallback){
-      params.statusCallback({progress:100});
+      params.statusCallback({progress:100, message:"Complete"});
     }
 
     return partsUnion;
@@ -146,6 +183,12 @@ function centrePoly(poly) {
     let bounds = poly.getBounds(); 
     let centre = bounds[1].plus(bounds[0]).scale(-0.5);
     return poly.translate([centre.x, centre.y, centre.z]);
+}
+ 
+function centrePolyOnFloor(poly) { 
+    let bounds = poly.getBounds(); 
+    let centre = bounds[1].plus(bounds[0]).scale(-0.5);
+    return poly.translate([centre.x, centre.y, -bounds[0].z]);
 }
   
 

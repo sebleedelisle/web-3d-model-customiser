@@ -16,52 +16,62 @@ var modelConfig = {
   materialType:"PETG",
   count:1, 
   model:null,
-  extrasModelsLoaded:null,
+  extrasModelsLoaded:false,
   addDate:true,
   addMaterial:true, 
   addMouseEars:false
 }; 
+// models get added to this object : 
+//  cutOuts:null, 
+//  supports:null,
+//  bottomReinforcement:null,
+//  statusCallback:null,
+
+
+const modelNames = ["model","feet","supports","mouseEars","cutOuts"];
 
 var buildOutput;
 var downloadButton;
-var materialTypeDropdown;
-var quantityField;
-var layerHeightField;
-var dateDropdown;
-var addDateCheckbox; 
-var nameField;
 var viewer;
 var updatingModel;
 var cancelUpdate;
-var lastInput;
+var lastInput = false;
 var updateOverlayNodes;
 var updateOverlayMessage;
 var updateOverlayProgress;
 var selectedDate = new Date();
 const inputTimeout = 200;
 
+const formElementsIds = {
+  nameField:"name-field",
+  quantityField:"stack-count",
+  materialTypeDropdown:"material-type",
+  dateDropdown:"selected-date",
+  addDateCheckbox:"add-date",
+  addMaterialCheckbox:"add-material",
+  addMouseEarsCheckbox:"add-mouse-ears",
+  qualityDropdown:"selected-quality",
+  layerHeightField:"layer-height",
+  addBottomCheckbox : "add-bottom-reinforcement"
+  }
+var formElements = {};
+
 function init(){
   initZPad();
 
   downloadButton = document.getElementById('download-button');
-  nameField = document.getElementById("name-field");
   updateOverlayNodes = document.getElementsByClassName("update-overlay");
   updateOverlayMessage = document.querySelector(".update-overlay .update-message");
   updateOverlayProgress =  document.querySelector(".update-overlay .update-progress");
-  materialTypeDropdown = document.getElementById("material-type");  
-  quantityField = document.getElementById("stack-count");
-  dateDropdown = document.getElementById("selected-date");
-  addDateCheckbox = document.getElementById("add-date"); 
-  addMaterialCheckbox = document.getElementById("add-material"); 
-  addMouseEarsCheckbox = document.getElementById("add-mouse-ears"); 
-  qualityDropdown = document.getElementById("selected-quality");
-  layerHeightField = document.getElementById("layer-height");
+
+  Object.entries(formElementsIds).forEach(([key,value])=>formElements[key]=document.getElementById(value));
+
   //init 3d model viewer
   var containerdiv = document.getElementById('viewerContainer');
   var viewerdiv = document.createElement('div');
-  viewerdiv.className = 'viewer'
-  viewerdiv.style.width = '100%'
-  viewerdiv.style.height = '100%'
+  viewerdiv.className = 'viewer';
+  viewerdiv.style.width = '100%';
+  viewerdiv.style.height = '100%';
   containerdiv.appendChild(viewerdiv);
   viewer = new Viewer(viewerdiv,{
    // 3jscad-viewer-lightgl.js:298 {"position":{"x":16.850816779459187,"y":10.79013653116062,"z":192.0986346883937},"angle":{"x":-67.79999999999998,"y":1.6000000000000003,"z":65}}
@@ -75,67 +85,32 @@ function init(){
   });
   viewer.init();
 
-  /* init model dropdown */
-  reloadModel(); 
 
-  quantityField.onchange = function(){
-    modelConfig.count = parseInt( quantityField.value );
-    updateModel();  
-  }
-  layerHeightField.onchange = function(){
-    modelConfig.layerHeight = parseFloat( layerHeightField.value );
-    updateModel();  
-  }
-  addDateCheckbox.onchange = function(){
-    modelConfig.addDate = addDateCheckbox.checked;
-    dateDropdown.disabled = !addDateCheckbox.checked;
-    updateModel();  
-  }
-  addMaterialCheckbox.onchange = function(){
-    modelConfig.addMaterial = addMaterialCheckbox.checked;
-    materialTypeDropdown.disabled = !addMaterialCheckbox.checked;
-    updateModel();  
-  }
-  addMouseEarsCheckbox.onchange = function(){
-    modelConfig.addMouseEars = addMouseEarsCheckbox.checked;
-    updateModel();  
-  }
-  qualityDropdown.onchange = function(){
+  const onInput = function(){ lastInput=Date.now()-inputTimeout }; 
+  Object.entries(formElements).forEach(function([key,element]){
+    
+    if(element.type==='text'){
+      element.oninput = onInput;
+    }
+    else {
+      element.onchange = onInput;
+    }
+  });
+
+  // handled seperately as it requires a model reload
+  formElements.qualityDropdown.onchange = function(){
     console.log("qualityDropdown.onchange"); 
-    modelConfig.quality = qualityDropdown.value; 
-    //modelConfig.modelFile = `models/${modelConfig.model}.jscad`;
+    updateUI();
+    saveForm();
     reloadModel(); 
-    updateModel();  
   }
-  /* init material dropdown */
-  materialTypeDropdown.onchange = function(){ 
-    modelConfig.materialType = materialTypeDropdown.value; 
-    lastInput=Date.now()-inputTimeout; 
-  };
-
-  /* init name field */
-  nameField.oninput = function(){ lastInput=Date.now() };
-  //input update check
-  setInterval(inputUpdateCheck,100);
-  
 
   /* init date dropdown */
-  let days = ["today","+1 day","","","","","",""];
-  days.forEach(function(text,offsetDays){
-    if(text===""){
-      text = `+${offsetDays} days`;
-    }
-    let option = document.createElement("option");
-    let date = new Date( Date.now() + offsetDays*24*3600*1000 );    
-    option.innerText = `${text} - ${dateString(date)}`;
-    option.value = offsetDays;
-    dateDropdown.appendChild(option);
-  });
-  dateDropdown.onchange = function(){
-    let offsetDays = parseInt( dateDropdown.value ) || 0;
-    selectedDate = new Date( Date.now() + offsetDays*24*3600*1000 ); 
-    updateModel();
-  };
+  initDate();  
+  
+  //formElements.dateDropdown.onchange = function(){
+  //  updateModel();
+  //};
  
   /* init download button */
   downloadButton.addEventListener('click',function(){
@@ -146,22 +121,48 @@ function init(){
     
   });
 
+
+  loadForm();
+  updateUI();
+  reloadModel(); 
+  setInterval(inputUpdateCheck,100);
+}
+
+function initDate(){
+  let selectedOffset = parseInt( formElements.dateDropdown.value ) || 0;
+  let days = ["today","+1 day","","","","","",""];
+  while(formElements.dateDropdown.firstElementChild)
+    formElements.dateDropdown.removeChild(formElements.dateDropdown.lastElementChild);
+
+  days.forEach(function(text,offsetDays){
+    if(text===""){
+      text = `+${offsetDays} days`;
+    }
+    let option = document.createElement("option");
+    let date = new Date( Date.now() + offsetDays*24*3600*1000 );    
+    option.innerText = `${text} - ${dateString(date)}`;
+    option.value = offsetDays;
+    if(offsetDays===selectedOffset)
+      option.setAttribute("selected",null);
+    formElements.dateDropdown.appendChild(option);
+  });
+
 }
 
 function reloadModel() { 
-
+  
   modelConfig.modelFile = `models/${modelConfig.modelName}_${modelConfig.quality}.stl`;
   let loadFileWorker = work(require("./file-loader"));
   loadFileWorker.addEventListener("message",onMessageFromFileLoader);
   loadFileWorker.postMessage({cmd:"load-stl",name:"model",url:new URL(modelConfig.modelFile, window.location.origin).toString()});
   
-  if(!modelConfig.extrasModelsLoadedl) { 
-    //console.log("loading extras");      
+  if(!modelConfig.extrasModelsLoaded) { 
+    console.log("loading extras");      
     loadFileWorker.postMessage({cmd:"load-stl",name:"feet",url:new URL("models/Feet.stl", window.location.origin).toString()});
     loadFileWorker.postMessage({cmd:"load-stl",name:"supports",url:new URL("models/Supports.stl", window.location.origin).toString()});
     loadFileWorker.postMessage({cmd:"load-stl",name:"mouseEars",url:new URL("models/mouseEars.stl", window.location.origin).toString()});  
     loadFileWorker.postMessage({cmd:"load-stl",name:"cutOuts",url:new URL("models/Cutouts.stl", window.location.origin).toString()});  
-    loadFileWorker.postMessage({cmd:"load-stl",name:"bottom-reinforcement",url:new URL("models/bottom_reinforcement.stl", window.location.origin).toString()});  
+    loadFileWorker.postMessage({cmd:"load-stl",name:"bottomReinforcement",url:new URL("models/bottom_reinforcement.stl", window.location.origin).toString()});  
     modelConfig.extrasModelsLoaded = true;
   }
 
@@ -172,6 +173,8 @@ function inputUpdateCheck(){
     var elapsed = Date.now()-lastInput;
     if(elapsed>inputTimeout){
       lastInput = false;
+      updateUI();
+      saveForm();
       updateModel();
     }
   }
@@ -196,13 +199,8 @@ function onModelBuildStart(){
   updateOverlayProgress.removeAttribute("value");
 }
 
-function onModelBuildComplete(){
-  Array.prototype.forEach.call(updateOverlayNodes,(n)=>{ n.style.visibility = "hidden" });
-  /*
-  for (i = 0; i < updateOverlayNodes.length; i++) {
-    updateOverlayNodes[i].style.visibility = "hidden";
-  }
-  */
+function onModelBuildComplete(){  
+  Array.prototype.forEach.call(updateOverlayNodes,(n)=>{ n.style.visibility = "hidden" });  
   downloadButton.disabled = false;  
   viewer.viewpointY = 11 - ((modelConfig.count*20.25)*0.5); 
   viewer.onDraw();
@@ -221,12 +219,42 @@ function dateStringFullYear(date){
   return date.getDate().pad(2)+"."+(date.getMonth()+1).pad(2)+"."+date.getFullYear().toString();
 }
 
+const updateUI = function(){
+
+  let offsetDays = parseInt( formElements.dateDropdown.value ) || 0;
+  initDate();
+  selectedDate = new Date( Date.now() + offsetDays*24*3600*1000 );     
+  modelConfig.addMouseEars = formElements.addMouseEarsCheckbox.checked;
+  modelConfig.count = parseInt( formElements.quantityField.value );
+  modelConfig.addDate = formElements.addDateCheckbox.checked;
+  modelConfig.addMaterial = formElements.addMaterialCheckbox.checked;
+  modelConfig.quality = formElements.qualityDropdown.value; 
+  modelConfig.name = formElements.nameField.value;
+  modelConfig.materialType = formElements.materialTypeDropdown.value;
+  modelConfig.addBottom = formElements.addBottomCheckbox.checked; 
+
+  let dateStr = dateString(selectedDate);
+  let labellefttext = ""; 
+  if(modelConfig.addMaterial) labellefttext = modelConfig.materialType+" ";
+  if(modelConfig.addDate) labellefttext = labellefttext + dateStr;  
+  modelConfig.labellefttext = labellefttext;
+
+  formElements.dateDropdown.disabled = !formElements.addDateCheckbox.checked;
+  formElements.materialTypeDropdown.disabled = !formElements.addMaterialCheckbox.checked;
+
+  
+}
+
 const updateModel = function(){
-  const modelNames = ["model","feet","supports","mouseEars"];
+  
+
   
   if( !modelNames.every(name=>!!modelConfig[name]) ){
     return;
   }
+
+
+
   if(updatingModel){
     if(cancelUpdate){
       if(typeof(cancelUpdate)!=="function")
@@ -242,12 +270,8 @@ const updateModel = function(){
   updatingModel = true;
   onModelBuildStart();
   //const parameters = getParameterValues(this.paramControls)
-  modelConfig.name = nameField.value;
-  let dateStr = dateString(selectedDate);
-  let labellefttext = ""; 
-  if(modelConfig.addMaterial) labellefttext = modelConfig.materialType+" ";
-  if(modelConfig.addDate) labellefttext = labellefttext + dateStr;  
-  modelConfig.labellefttext = labellefttext;
+  
+
   
   let buildWorker = work(require("./rebuild-worker"));
   buildWorker.addEventListener("message",onMessageFromBuilder);
@@ -286,6 +310,7 @@ const onMessageFromFileWorker = function(evt){
 const onProgress = function(evt){
   //console.log(evt.data);
   updateOverlayProgress.value = evt.data.progress;
+  if(evt.data.message) updateOverlayMessage.innerText = evt.data.message;
 }
 
 const onFileCreated = function(evt){
@@ -296,10 +321,8 @@ const onFileCreated = function(evt){
     onSaveComplete();
   }
   let { fileData, ext } = evt.data;
-  console.log(evt.data);
   fileData = convertToBlob(fileData);
  
-  console.log("returned file is blob?",fileData instanceof Blob);
   outputFile(ext, fileData, onDone, null);  
 }
 
@@ -336,7 +359,45 @@ const saveFile = (function () {
   };
 }());
 
+const saveForm = function(){
+  console.log("saving settings locally");
+  
+  Object.entries(formElements).forEach(function([key,element]){
+    let value;
+    if(element.type==='checkbox'){
+      value = element.checked;
+    }
+    else {
+      value = element.value;
+    }
+    
+    localStorage.setItem(key,value);
+  });
+}
 
+const loadForm = function(){
+  console.log("loading settings locally");
+  
+  Object.entries(formElements).forEach(function([key,element]){
+    let value = localStorage.getItem(key);
+    if(value === null)
+      return;
+     
+
+      if(element.type==='checkbox'){
+      element.checked = ( value === 'true' );
+    } 
+    else if(element.type==='number'){
+      element.value = parseFloat(value);
+    }
+    else if(element.tagName === 'SELECT'){
+      element.value = value;
+    }
+    else {
+      element.value = value;
+    }
+  });
+}
 
 document.addEventListener('DOMContentLoaded', function (event) {
   init();
