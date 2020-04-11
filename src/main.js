@@ -11,7 +11,8 @@ const work = require('webworkify');
 var modelConfig = {
   name:"single", 
   modelName:"PrusaHeadBandRC3", 
-  quality : "low",
+  quality : "high",
+  layerHeight : 0.25, 
   materialType:"PETG",
   count:1, 
   model:null,
@@ -25,6 +26,7 @@ var buildOutput;
 var downloadButton;
 var materialTypeDropdown;
 var quantityField;
+var layerHeightField;
 var dateDropdown;
 var addDateCheckbox; 
 var nameField;
@@ -53,6 +55,7 @@ function init(){
   addMaterialCheckbox = document.getElementById("add-material"); 
   addMouseEarsCheckbox = document.getElementById("add-mouse-ears"); 
   qualityDropdown = document.getElementById("selected-quality");
+  layerHeightField = document.getElementById("layer-height");
   //init 3d model viewer
   var containerdiv = document.getElementById('viewerContainer');
   var viewerdiv = document.createElement('div');
@@ -77,6 +80,10 @@ function init(){
 
   quantityField.onchange = function(){
     modelConfig.count = parseInt( quantityField.value );
+    updateModel();  
+  }
+  layerHeightField.onchange = function(){
+    modelConfig.layerHeight = parseFloat( layerHeightField.value );
     updateModel();  
   }
   addDateCheckbox.onchange = function(){
@@ -153,6 +160,7 @@ function reloadModel() {
     loadFileWorker.postMessage({cmd:"load-stl",name:"feet",url:new URL("models/Feet.stl", window.location.origin).toString()});
     loadFileWorker.postMessage({cmd:"load-stl",name:"supports",url:new URL("models/Supports.stl", window.location.origin).toString()});
     loadFileWorker.postMessage({cmd:"load-stl",name:"mouseEars",url:new URL("models/mouseEars.stl", window.location.origin).toString()});  
+    loadFileWorker.postMessage({cmd:"load-stl",name:"cutOuts",url:new URL("models/Cutouts.stl", window.location.origin).toString()});  
     modelConfig.extrasModelsLoaded = true;
   }
 
